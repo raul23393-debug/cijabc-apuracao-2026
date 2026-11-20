@@ -1,1 +1,134 @@
 
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apuração Eleições Suplementares 2026</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f2f4f8;color:#202938;font-family:Arial,sans-serif}
+header{background:#142d50;color:white;padding:30px 18px;text-align:center}
+header h1{font-size:25px;margin:0 0 10px}
+header p{margin:0;color:#d9e5f5}
+main{max-width:850px;margin:25px auto;padding:0 15px}
+.card{background:white;border-radius:13px;padding:20px;margin-bottom:17px;box-shadow:0 3px 14px #0000000c}
+h2{font-size:19px;margin:0 0 17px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.stat{background:#f3f6fa;padding:16px 8px;border-radius:10px;text-align:center}
+.stat strong{display:block;font-size:25px;color:#173d69}
+.stat span{font-size:12px;color:#637083}
+.candidate{padding:15px 0;border-bottom:1px solid #e8edf3}
+.line{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.name{font-weight:bold}
+.votes{font-weight:bold;font-size:18px}
+.bar{height:9px;background:#e9eef5;border-radius:20px;margin-top:10px;overflow:hidden}
+.fill{height:100%;background:#2765a5;border-radius:20px}
+.status{font-size:11px;font-weight:bold;padding:5px 8px;border-radius:5px;white-space:nowrap}
+.eleito{background:#dcf6e5;color:#13753b}
+.nao{background:#fde5e5;color:#b42318}
+.empate{background:#fff1cc;color:#8a5a00}
+footer{text-align:center;color:#718096;font-size:12px;padding:20px}
+#message{color:#68778a;font-size:13px}
+@media(max-width:500px){.stats{grid-template-columns:repeat(2,1fr)}header h1{font-size:21px}}
+</style>
+</head>
+<body>
+<header>
+<h1>Apuração Eleições Suplementares 2026</h1>
+<p>Comissões, Secretarias e Diretorias</p>
+</header>
+<main>
+<section class="card">
+<h2>Parcial da apuração</h2>
+<div class="stats">
+<div class="stat"><strong id="total">—</strong><span>Votos computados</span></div>
+<div class="stat"><strong id="urnas">—</strong><span>Urnas apuradas</span></div>
+<div class="stat"><strong id="brancos">—</strong><span>Votos brancos</span></div>
+<div class="stat"><strong id="nulos">—</strong><span>Votos nulos</span></div>
+<div class="stat"><strong id="situacao">—</strong><span>Situação</span></div>
+</div>
+</section>
+<section class="card">
+<h2>Presidência</h2>
+<div id="candidates">Aguardando conexão com o banco de dados...</div>
+<p id="message">Aguardando atualização.</p>
+</section>
+</main>
+<footer>Comissão Eleitoral 2026 · Atualização automática</footer>
+<script>
+const SUPABASE_URL = "https://daxvxxbzjmlbhveigqnh.supabase.co";
+const SUPABASE_ANON_KEY = "COLE_AQUI_A_CHAVE_PUBLICA_ANON";
+const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const nomes = [
+  {campo:"raul", nome:"Raul"},
+  {campo:"joao", nome:"João"},
+  {campo:"isabella", nome:"Isabella"},
+  {campo:"henri", nome:"Henri"}
+];
+
+function numero(v){return Number(v || 0)}
+function formatar(v){return numero(v).toLocaleString("pt-BR")}
+
+async function atualizar(){
+  const mensagem = document.getElementById("message");
+  try{
+    const {data,error} = await client
+      .from("cijabc_results")
+      .select("*")
+      .eq("id",1)
+      .single();
+
+    if(error) throw error;
+
+    const candidatos = nomes.map(c=>({
+      nome:c.nome,
+      votos:numero(data[c.campo])
+    })).sort((a,b)=>b.votos-a.votos || a.nome.localeCompare(b.nome,"pt-BR"));
+
+    const maior = candidatos[0]?.votos || 0;
+    const empatados = candidatos.filter(c=>c.votos===maior);
+    const empateNaLideranca = maior>0 && empatados.length>1;
+    const totalCandidatos = candidatos.reduce((s,c)=>s+c.votos,0);
+    const brancos = numero(data.brancos);
+    const nulos = numero(data.nulos);
+
+    document.getElementById("total").textContent=formatar(totalCandidatos+brancos+nulos);
+    document.getElementById("urnas").textContent=formatar(data.urnas);
+    document.getElementById("brancos").textContent=formatar(brancos);
+    document.getElementById("nulos").textContent=formatar(nulos);
+    document.getElementById("situacao").textContent=data.closed ? "Encerrada" : "Em andamento";
+
+    document.getElementById("candidates").innerHTML=candidatos.map((c,i)=>{
+      let resultado="NÃO ELEITO", classe="nao";
+      if(c.votos>0 && i===0 && empateNaLideranca){
+        resultado="EMPATE"; classe="empate";
+      }else if(c.votos>0 && i===0){
+        resultado="ELEITO"; classe="eleito";
+      }
+      const percentual=totalCandidatos ? c.votos/totalCandidatos*100 : 0;
+      return `<div class="candidate">
+        <div class="line">
+          <span class="name">${c.nome}</span>
+          <span class="votes">${formatar(c.votos)} votos</span>
+        </div>
+        <div class="line" style="margin-top:8px">
+          <span class="status ${classe}">${resultado}</span>
+          <span style="font-size:12px;color:#68778a">${percentual.toFixed(1).replace(".",",")}%</span>
+        </div>
+        <div class="bar"><div class="fill" style="width:${percentual}%"></div></div>
+      </div>`;
+    }).join("");
+
+    mensagem.textContent="Última atualização: "+new Date().toLocaleTimeString("pt-BR");
+  }catch(e){
+    mensagem.textContent="Não foi possível carregar os resultados. Verifique a chave pública e as permissões de leitura do Supabase.";
+  }
+}
+atualizar();
+setInterval(atualizar,10000);
+</script>
+</body>
+</html>
